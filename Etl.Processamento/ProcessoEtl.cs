@@ -46,28 +46,59 @@ namespace Etl.Processamento
             if (!string.IsNullOrEmpty(message.Message)) Console.Write(message.Message);
         }
 
-        private GenerateResponse<List<FtLancamentos>> Transform()
+        private GenerateResponse<FtLancamentos> Transform()
         {
-            var colaboradoresRelacional = Context.Colaboradores
-                .Include(x => x.Lancamentos)
-                .ThenInclude(x => x.CodRubricaNavigation)
+            var lancamentosRelacional = Context.Lancamentos
+                .Include(x => x.CodRubricaNavigation)
                 .ThenInclude(x => x.CodGrupoNavigation)
-                .Include(x => x.Lancamentos)
-                .ThenInclude(x => x.FolhasPagamentos)
-                .Include(x => x.EvolucoesFuncionais)
+                .Include(x => x.FolhasPagamentos)
+                .Include(x => x.CodColabNavigation)
+                .ThenInclude(x => x.EvolucoesFuncionais)
                 .ThenInclude(x => x.CodSetorNavigation)
                 .ThenInclude(x => x.CodUndNavigation)
-                .Include(x => x.EvolucoesFuncionais)
-                .ThenInclude(x => x.CodSetorNavigation)
-                .ThenInclude(x => x.CodUndNavigation)
-                .Include(x => x.EvolucoesFuncionais)
+                .Include(x => x.CodColabNavigation.EvolucoesFuncionais)
                 .ThenInclude(x => x.CodCargoNavigation)
                 .ThenInclude(x => x.CodCarreiraNavigation)
-                .Include(x => x.Setores)
-                .ThenInclude(x => x.CodUndNavigation)
                 .ToList();
-            //var teste = lancamentosRelacional.Where(x => x.Setores.Any());
-            return GenerateSuccessResponse(new List<FtLancamentos>());
+
+            foreach (var lancamento in lancamentosRelacional)
+            {
+                var ftLancamento = new FtLancamentos()
+                {
+                    CodCargoNavigation = new DmCargos
+                    {
+                        CodCargo = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodCargo,
+                        DscCargo = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodCargoNavigation.DscCargo,
+                        DscCarreira = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodCargoNavigation
+                            .CodCarreiraNavigation.DscCarreira
+                    },
+                    CodSetorNavigation = new DmSetores()
+                    {
+                        CidadeUnidade = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodSetorNavigation
+                            .CodUndNavigation.DscUnd,
+                        CodSetor = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodSetor,
+                        DscSetor = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodSetorNavigation.DscSetor,
+                        DscUnidade = lancamento.CodColabNavigation.EvolucoesFuncionais.Last().CodSetorNavigation
+                            .CodUndNavigation.DscUnd,
+                        UfUnidade = Convert.ToChar(lancamento.CodColabNavigation.EvolucoesFuncionais.Last()
+                            .CodSetorNavigation.CodUndNavigation.UfUnd)
+                    },
+                    CodRubricaNavigation = new DmRubricas()
+                    {
+                        CodRubrica = lancamento.CodRubrica,
+                        DscRubrica = lancamento.CodRubricaNavigation.DscRubrica,
+                        DscGrupo = lancamento.CodRubricaNavigation.CodGrupoNavigation.DscGrupo,
+                        TipoRubrica = lancamento.CodRubricaNavigation.TpoRubrica.ToString()
+                    },
+                    ValorBruto = lancamento.ValLanc,
+                    ValorLiquido = lancamento.ValLanc - lancamento.CodRubricaNavigation.Lancamentos
+                        .Where(x => x.CodRubricaNavigation.TpoRubrica == 'D').Select(x => x.ValLanc).Sum(),
+                    ValorDesconto = lancamento.CodRubricaNavigation.Lancamentos
+                        .Where(x => x.CodRubricaNavigation.TpoRubrica == 'D').Select(x => x.ValLanc).Sum(),
+                    TotalLanc = lancamento.CodRubricaNavigation.Lancamentos.Count
+                };
+            }
+            return GenerateSuccessResponse(new FtLancamentos());
         }
 
         private GenerateResponse Truncate(string tableName)
