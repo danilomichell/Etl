@@ -100,6 +100,34 @@ namespace Etl.Processamento
                         .Where(x => x.CodRubricaNavigation.TpoRubrica == 'D').Select(x => x.ValLanc).Sum(),
                     TotalLanc = lancamento.CodRubricaNavigation.Lancamentos.Count
                 };
+                var tempServico = DateTime.Now.Year - lancamento.CodColabNavigation.DatAdmissao.Year;
+                ftLancamento.CodTempoServNavigation = tempServico switch
+                {
+                    <= 21 => new DmTemposServicos()
+                    {
+                        AnoInicial = 18,
+                        AnoFinal = 21,
+                        DscTempoServ = $"{tempServico} anos"
+                    },
+                    <= 30 => new DmTemposServicos()
+                    {
+                        AnoInicial = 22,
+                        AnoFinal = 30,
+                        DscTempoServ = $"{tempServico} anos"
+                    },
+                    <= 45 => new DmTemposServicos()
+                    {
+                        AnoInicial = 31,
+                        AnoFinal = 45,
+                        DscTempoServ = $"{tempServico} anos"
+                    },
+                    _ => new DmTemposServicos()
+                    {
+                        AnoInicial = 46,
+                        AnoFinal = tempServico,
+                        DscTempoServ = $"{tempServico} anos"
+                    }
+                };
 
                 lancamentos.Add(ftLancamento);
             }
