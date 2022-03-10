@@ -1,10 +1,10 @@
 ﻿using System.Data;
+using System.Transactions;
 using Etl.Data.Context;
 using Etl.Data.Domain.Entities;
 using Etl.Processamento.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
 
 namespace Etl.Processamento
 {
@@ -20,9 +20,12 @@ namespace Etl.Processamento
         {
             Exclud();
             var lancamentos = Transform();
+            if (!lancamentos.Success) Console.Write(lancamentos.Message);
+            var load = Load(lancamentos.Value);
+            if (!load.Success) Console.Write(load.Message);
         }
 
-        public void Exclud()
+        private void Exclud()
         {
             var message = Truncate(TableName(Context.DmCargos));
             if (!string.IsNullOrEmpty(message.Message)) Console.Write(message.Message);
@@ -46,7 +49,7 @@ namespace Etl.Processamento
             if (!string.IsNullOrEmpty(message.Message)) Console.Write(message.Message);
         }
 
-        private GenerateResponse<FtLancamentos> Transform()
+        private GenerateResponse<List<FtLancamentos>> Transform()
         {
             var lancamentosRelacional = Context.Lancamentos
                 .Include(x => x.CodRubricaNavigation)
@@ -60,7 +63,7 @@ namespace Etl.Processamento
                 .ThenInclude(x => x.CodCargoNavigation)
                 .ThenInclude(x => x.CodCarreiraNavigation)
                 .ToList();
-
+            var lancamentos = new List<FtLancamentos>();
             foreach (var lancamento in lancamentosRelacional)
             {
                 var ftLancamento = new FtLancamentos()
@@ -97,8 +100,26 @@ namespace Etl.Processamento
                         .Where(x => x.CodRubricaNavigation.TpoRubrica == 'D').Select(x => x.ValLanc).Sum(),
                     TotalLanc = lancamento.CodRubricaNavigation.Lancamentos.Count
                 };
+
+                lancamentos.Add(ftLancamento);
             }
-            return GenerateSuccessResponse(new FtLancamentos());
+            return GenerateSuccessResponse(lancamentos);
+        }
+
+        private GenerateResponse Load(IEnumerable<FtLancamentos> lancamentos)
+        {
+            try
+            {
+                using var scope = new TransactionScope();
+                Context.FtLancamentos.AddRange(lancamentos);
+                Context.SaveChanges();
+                scope.Complete();
+                return GenerateSuccessResponse();
+            }
+            catch (Exception e)
+            {
+                return GenerateErroResponse(e.Message);
+            }
         }
 
         private GenerateResponse Truncate(string tableName)
